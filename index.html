@@ -10,7 +10,9 @@
 
   <link rel="stylesheet"
     href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
     crossorigin="">
+
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -23,35 +25,39 @@
           <div class="brand-subtitle">СИСТЕМА МОНІТОРИНГУ</div>
         </div>
       </a>
-      <div class="demo-pill" id="mode-pill">
-        <i></i><span>ЗАВАНТАЖЕННЯ</span>
+
+      <div class="demo-pill">
+        <i></i>
+        <span>ДЕМО-РЕЖИМ</span>
       </div>
     </header>
 
-    <section class="status-banner" id="status-banner">
+    <section class="status-banner">
       <div class="status-symbol">!</div>
       <div class="status-copy">
-        <strong id="status-title">Підключення до джерела даних</strong>
-        <span id="status-detail">Завантаження актуальних статусів регіонів…</span>
+        <strong>Джерело даних не підключено</strong>
+        <span>Цей сайт поки не отримує реальні повідомлення про загрози.</span>
       </div>
-      <span class="offline-label" id="connection-state">WAIT</span>
+      <span class="offline-label">OFFLINE</span>
     </section>
 
     <section class="stats-grid">
       <article class="stat-card">
         <span>ПОВІТРЯНІ ТРИВОГИ</span>
-        <strong id="alert-count">—</strong>
-        <small id="alert-caption">Очікування даних</small>
+        <strong>—</strong>
+        <small>Дані недоступні</small>
       </article>
+
       <article class="stat-card">
         <span>ПОДІЇ В СТРІЧЦІ</span>
         <strong id="event-count">0</strong>
-        <small>Записи з джерела даних</small>
+        <small>Інформаційні записи</small>
       </article>
+
       <article class="stat-card">
         <span>ОСТАННЄ ОНОВЛЕННЯ</span>
         <strong class="stat-time" id="last-update">—</strong>
-        <small id="connection-label">API не перевірено</small>
+        <small id="connection-label">API не підключено</small>
       </article>
     </section>
 
@@ -60,19 +66,20 @@
         <div class="panel-heading">
           <div>
             <h1>Мапа України</h1>
-            <p>Межі областей · актуальні статуси тривог</p>
+            <p>Інтерактивна карта · географічна основа</p>
           </div>
-          <span class="map-status" id="map-live"><i></i> ЗАВАНТАЖЕННЯ</span>
+          <span class="map-status"><i></i> НЕ LIVE</span>
         </div>
 
-        <div id="map" role="application" aria-label="Інтерактивна карта областей України">
+        <div id="map" role="application"
+          aria-label="Інтерактивна географічна карта України">
           <div class="map-loading">Завантаження карти…</div>
         </div>
 
         <div class="map-legend">
-          <span><i class="legend-dot neutral"></i> Немає активної тривоги в даних</span>
+          <span><i class="legend-dot neutral"></i> Немає даних</span>
           <span><i class="legend-dot alert"></i> Тривога</span>
-          <span><i class="legend-dot info"></i> Часткова тривога</span>
+          <span><i class="legend-dot info"></i> Інформація</span>
         </div>
 
         <div class="region-area">
@@ -80,8 +87,11 @@
           <input id="region-search" type="search"
             placeholder="Наприклад, Львів або Київ"
             autocomplete="off">
+
           <div id="region-results" class="region-results">
-            <p class="empty-state">Введи назву, щоб знайти населений пункт.</p>
+            <p class="empty-state">
+              Введи назву населеного пункту, щоб знайти його на карті.
+            </p>
           </div>
         </div>
       </section>
@@ -97,39 +107,55 @@
 
         <div class="filter-row" role="group" aria-label="Фільтр подій">
           <button class="filter active" data-filter="all">Усі</button>
-          <button class="filter" data-filter="alert">Тривоги</button>
           <button class="filter" data-filter="system">Система</button>
+          <button class="filter" data-filter="info">Інфо</button>
         </div>
 
         <div id="event-list" class="event-list">
-          <p class="empty-state">Завантаження подій…</p>
+          <article class="event-item">
+            <div class="event-icon">i</div>
+            <div class="event-body">
+              <div class="event-meta">
+                <span>СИСТЕМА</span>
+                <time>Зараз</time>
+              </div>
+              <strong>Сайт готовий до налаштування</strong>
+              <p>Підключення джерела даних ще не виконано.</p>
+            </div>
+          </article>
         </div>
 
         <div class="source-box">
-          <span class="source-dot" id="source-dot"></span>
+          <span class="source-dot"></span>
           <div>
             <strong>Джерело даних</strong>
-            <p id="source-status">Перевіряємо з'єднання…</p>
+            <p id="source-status">Не підключено</p>
           </div>
         </div>
 
         <div class="safety-note">
           <strong>Важливо</strong>
-          <p>Це незалежний інформаційний сервіс, не офіційний канал оповіщення.
-          Дані можуть запізнюватися або бути недоступними. Дотримуйся офіційних
-          сповіщень і вказівок місцевої влади.</p>
+          <p>
+            Цей сайт не є офіційною системою оповіщення.
+            Не покладайся на нього для визначення реальних загроз.
+            Користуйся офіційними сповіщеннями та вказівками
+            місцевої влади.
+          </p>
         </div>
       </aside>
     </main>
 
     <footer>
-      <span>AIRWATCH UA <b>·</b> ПРОТОТИП 0.2.0</span>
-      <span>Джерело статусів: Tryvoha.online</span>
+      <span>AIRWATCH UA <b>·</b> ПРОТОТИП 0.1.0</span>
+      <span>Дані про загрози не підключені</span>
     </footer>
   </div>
 
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    crossorigin=""></script>
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin="">
+  </script>
   <script src="./app.js"></script>
 </body>
 </html>
