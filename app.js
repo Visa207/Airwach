@@ -1,181 +1,432 @@
 
-const MAP_DATA_URL =
+"use strict";
+
+const $ = (selector) => document.querySelector(selector);
+
+const API = "https://tryvoha.online/api/v1";
+const GEOJSON_URL =
   "https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson";
 
-const API_URL = "https://tryvoha.online/api/v1";
-
-const map = L.map("map", {
-  zoomControl: true,
-  attributionControl: true
-}).setView([48.8, 31.4], 6);
-
-// Жодних Google Maps або дорожньої підкладки.
-let oblastLayer;
+let map = null;
+let oblastLayer = null;
 let regions = [];
-let lastUpdate = null;
+let currentAlerts = [];
+let events = [];
+let activeFilter = "all";
+let geoFeatures = [];
 
-const statusEl = document.getElementById("status");
-const alertsEl = document.getElementById("alerts-list");
-const updatedEl = document.getElementById("updated");
-
-function normalizeName(value) {
-  return String(value || "")
+const normalize = (value) =>
+  String(value || "")
     .toLocaleLowerCase("uk")
     .replace(/область|обл\.|місто|м\.|район/g, "")
     .replace(/[’'`]/g, "")
     .replace(/[^а-яіїєґa-z0-9]/gi, "");
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;"
+  })[c]);
 }
 
 function getFeatureName(feature) {
   const p = feature.properties || {};
-  return p.name_uk || p.name || p.NAME_1 || p.name_en || "";
+  return p.name_uk || p.NAME_1 || p.name || p.name_en ||
+    p.shapeName || p.NAME || "";
 }
 
-function getOblastName(feature) {
-  return getFeatureName(feature);
+function findRegionForFeature(feature) {
+  const featureName = normalize(getFeatureName(feature));
+  if (!featureName) return null;
+
+  return regions.find((region) => {
+    const candidates = [
+      region.name_uk,
+      region.name_en,
+      region.slug
+    ].map(normalize);
+
+    return candidates.some((name) =>
+      name && (name === featureName ||
+        name.replace(/ska$/, "ska") === featureName)
+    );
+  }) || null;
 }
 
-function getFeatureStatus(feature, activeSlugs, regionsData) {
-  const featureName = normalizeName(getOblastName(feature));
-
-  const region = regionsData.find(r =>
-    normalizeName(r.name_uk) === featureName
+function getAlertsForOblast(slug) {
+  return currentAlerts.filter((alert) =>
+    alert.slug === slug ||
+    alert.oblast_slug === slug
   );
-
-  if (!region) return "unknown";
-
-  if (activeSlugs.full.has(region.slug)) return "active";
-  if (activeSlugs.partial.has(region.slug)) return "partial";
-
-  return "calm";
 }
 
-function styleOblast(feature, activeSlugs, regionsData) {
-  const state = getFeatureStatus(feature, activeSlugs, regionsData);
+function regionStyle(feature) {
+  const region = findRegionForFeature(feature);
 
-  let fillColor = "#ffffff";
-  if (state === "active") fillColor = "#e53935";
-  if (state === "partial") fillColor = "#f4c542";
-  if (state === "unknown") fillColor = "#bdbdbd";
+  if (!region) {
+    return {
+      color: "#222",
+      weight: 1.2,
+      fillColor: "#e5e5e5",
+      fillOpacity: 1
+    };
+  }
+
+  const alerts = getAlertsForOblast(region.slug);
+  const hasRed = alerts.some((a) => a.level === "red");
+  const hasYellow = alerts.some((a) => a.level === "yellow");
+
+  let fillColor = "#f1f1f1";
+  if (hasRed) fillColor = "#e84b50";
+  else if (hasYellow) fillColor = "#f0bd45";
+  else if (alerts.length) fillColor = "#e84b50";
 
   return {
-    color: "#171717",
-    weight: 1.5,
+    color: "#202020",
+    weight: 1.4,
     opacity: 1,
     fillColor,
-    fillOpacity: 0.8
+    fillOpacity: 0.88
   };
 }
 
-function addOblastLabels(feature, layer) {
-  const name = getOblastName(feature);
-  if (!name) return;
+function addFeatureInteractions(feature, layer) {
+  const name = getFeatureName(feature);
+  const region = findRegionForFeature(feature);
 
-  layer.bindTooltip(name, {
-    permanent: true,
-    direction: "center",
-    className: "oblast-label",
-    opacity: 1
+  if (name) {
+    layer.bindTooltip(name, {
+      permanent: true,
+      direction: "center",
+      className: "oblast-label",
+      opacity: 1
+    });
+  }
+
+  layer.bindPopup(
+    `<div class="oblast-popup"><strong>${escapeHtml(name || "Регіон")}</strong><br>` +
+    `${region ? "Статус: перевіряється за API" : "Статус області не вдалося зіставити з даними API"}</div>`
+  );
+
+  layer.on("click", () => {
+    if (region) {
+      const active = getAlertsForOblast(region.slug);
+      layer.setPopupContent(
+        `<div class="oblast-popup"><strong>${escapeHtml(name)}</strong><br>` +
+        (active.length
+          ? `Активних повідомлень у джерелі: ${active.length}`
+          : "Активних повідомлень у джерелі не знайдено") +
+        "</div>"
+      );
+    }
   });
 }
 
-async function loadMap() {
-  const response = await fetch(MAP_DATA_URL);
-  if (!response.ok) throw new Error("Не вдалося завантажити межі областей");
+async function initMap() {
+  const mapElement = $("#map");
+
+  if (!window.L) {
+    mapElement.innerHTML =
+      '<div class="map-loading">Не вдалося завантажити Leaflet. Перевір інтернет.</div>';
+    throw new Error("Leaflet не завантажився");
+  }
+
+  mapElement.replaceChildren();
+
+  map = L.map("map", {
+    zoomControl: true,
+    scrollWheelZoom: true,
+    attributionControl: true
+  }).setView([48.8, 31.2], 6);
+
+  map.attributionControl.setPrefix(
+    '<a href="https://leafletjs.com/">Leaflet</a>'
+  );
+
+  const response = await fetch(GEOJSON_URL, { cache: "force-cache" });
+  if (!response.ok) throw new Error("Не вдалося завантажити GeoJSON");
 
   const geojson = await response.json();
+  geoFeatures = geojson.features || [];
+
+  if (!geoFeatures.length) {
+    throw new Error("GeoJSON не містить географічних об'єктів");
+  }
 
   oblastLayer = L.geoJSON(geojson, {
-    style: {
-      color: "#171717",
-      weight: 1.5,
-      fillColor: "#ffffff",
-      fillOpacity: 0.8
-    },
-    onEachFeature: (feature, layer) => {
-      addOblastLabels(feature, layer);
-      layer.bindPopup(getOblastName(feature) || "Область");
-    }
+    style: regionStyle,
+    onEachFeature: addFeatureInteractions
   }).addTo(map);
 
-  map.fitBounds(oblastLayer.getBounds(), { padding: [10, 10] });
+  map.fitBounds(oblastLayer.getBounds(), { padding: [8, 8] });
+
+  setTimeout(() => map.invalidateSize(), 200);
+}
+
+function formatTime(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleTimeString("uk-UA", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function renderEvents() {
+  const list = $("#event-list");
+  const visible = events.filter((event) =>
+    activeFilter === "all" || event.category === activeFilter
+  );
+
+  $("#event-count").textContent = String(visible.length);
+  $("#event-badge").textContent = String(visible.length);
+  list.replaceChildren();
+
+  if (!visible.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Подій цієї категорії зараз немає.";
+    list.append(empty);
+    return;
+  }
+
+  for (const event of visible.slice(0, 60)) {
+    const article = document.createElement("article");
+    article.className = "event-item";
+
+    const icon = document.createElement("div");
+    icon.className = `event-icon ${event.category === "alert" ? "alert" : "info"}`;
+    icon.textContent = event.category === "alert" ? "!" : "i";
+
+    const body = document.createElement("div");
+    body.className = "event-body";
+
+    const meta = document.createElement("div");
+    meta.className = "event-meta";
+
+    const label = document.createElement("span");
+    label.textContent = event.label;
+
+    const time = document.createElement("time");
+    time.textContent = event.time || "—";
+
+    const title = document.createElement("strong");
+    title.textContent = event.title;
+
+    const detail = document.createElement("p");
+    detail.textContent = event.detail;
+
+    meta.append(label, time);
+    body.append(meta, title, detail);
+    article.append(icon, body);
+    list.append(article);
+  }
+}
+
+function setSystemEvent(title, detail) {
+  events = events.filter((event) => event.category !== "system");
+  events.unshift({
+    category: "system",
+    label: "СИСТЕМА",
+    title,
+    detail,
+    time: formatTime(new Date().toISOString())
+  });
+}
+
+function updateStatus(ok, title, detail) {
+  $("#status-title").textContent = title;
+  $("#status-detail").textContent = detail;
+  $("#connection-state").textContent = ok ? "ONLINE" : "OFFLINE";
+  $("#connection-label").textContent = ok ? "API підключено" : "Помилка з'єднання";
+  $("#source-status").textContent = ok
+    ? "Tryvoha.online — дані отримано"
+    : "Джерело недоступне";
+  $("#source-dot").classList.toggle("ok", ok);
+  $("#source-dot").classList.toggle("error", !ok);
+  $("#mode-pill").querySelector("span").textContent = ok
+    ? "ДАНІ ПІДКЛЮЧЕНО"
+    : "НЕМАЄ ЗВ'ЯЗКУ";
+  $("#map-live").innerHTML = `<i></i> ${ok ? "ОНОВЛЕНО" : "НЕМАЄ ЗВ'ЯЗКУ"}`;
 }
 
 async function refreshAlerts() {
   try {
-    statusEl.textContent = "Завантаження статусів…";
-
     const [alertsResponse, regionsResponse] = await Promise.all([
-      fetch(`${API_URL}/alerts`, { cache: "no-store" }),
-      fetch(`${API_URL}/regions`, { cache: "no-store" })
+      fetch(`${API}/alerts`, { cache: "no-store" }),
+      fetch(`${API}/regions`, { cache: "no-store" })
     ]);
 
     if (!alertsResponse.ok || !regionsResponse.ok) {
-      throw new Error("Джерело статусів тимчасово недоступне");
+      throw new Error("API повернув помилку");
     }
 
     const alertData = await alertsResponse.json();
-    regions = await regionsResponse.json();
+    const regionData = await regionsResponse.json();
 
-    const activeSlugs = {
-      full: new Set(),
-      partial: new Set()
-    };
-
-    for (const alert of (alertData.alerts || [])) {
-      if (alert.type === "state") {
-        activeSlugs.full.add(alert.slug);
-      } else if (alert.oblast_slug) {
-        activeSlugs.partial.add(alert.oblast_slug);
-      }
+    if (!Array.isArray(alertData.alerts) || !Array.isArray(regionData)) {
+      throw new Error("Непередбачений формат відповіді API");
     }
 
-    // Якщо область має загальну тривогу, не позначаємо її частковою.
-    for (const slug of activeSlugs.full) {
-      activeSlugs.partial.delete(slug);
-    }
+    regions = regionData;
+    currentAlerts = alertData.alerts;
 
-    if (oblastLayer) {
-      oblastLayer.setStyle(feature =>
-        styleOblast(feature, activeSlugs, regions)
-      );
-    }
+    events = currentAlerts.map((alert) => ({
+      category: "alert",
+      label: alert.level === "yellow" ? "ЧАСТКОВА ТРИВОГА" : "ТРИВОГА",
+      title: alert.name_uk || alert.slug || "Регіон",
+      detail: alert.level === "yellow"
+        ? "У джерелі позначено жовтий рівень повідомлення."
+        : "У джерелі позначено активну тривогу.",
+      time: formatTime(alert.started_at)
+    }));
 
-    const activeAlerts = alertData.alerts || [];
+    setSystemEvent(
+      "Дані успішно оновлено",
+      "Статуси отримано з публічного API Tryvoha.online."
+    );
 
-    if (activeAlerts.length === 0) {
-      alertsEl.textContent = "Активних тривог у джерелі не зазначено.";
-    } else {
-      alertsEl.replaceChildren();
+    const activeRegions = new Set(
+      currentAlerts.map((a) => a.oblast_slug || a.slug)
+    );
 
-      for (const alert of activeAlerts) {
-        const item = document.createElement("li");
-        const level = alert.level === "yellow" ? "ЖОВТИЙ" : "ЧЕРВОНИЙ";
-        item.textContent = `${alert.name_uk || alert.slug} — ${level}`;
-        alertsEl.appendChild(item);
-      }
-    }
+    $("#alert-count").textContent = String(activeRegions.size);
+    $("#alert-caption").textContent = "Регіони з активними повідомленнями";
+    $("#last-update").textContent = formatTime(
+      alertData.updated_at || new Date().toISOString()
+    );
 
-    lastUpdate = new Date();
-    updatedEl.textContent = lastUpdate.toLocaleTimeString("uk-UA");
-    statusEl.textContent = "Дані отримано";
+    updateStatus(
+      true,
+      "Дані тривог отримано",
+      `Активних записів у джерелі: ${currentAlerts.length}. Перевіряй офіційні сповіщення.`
+    );
+
+    if (oblastLayer) oblastLayer.setStyle(regionStyle);
+    renderEvents();
   } catch (error) {
-    statusEl.textContent = "Не вдалося оновити дані";
-    alertsEl.textContent =
-      "Немає зв'язку з джерелом. Статуси на карті можуть бути застарілими.";
-    console.error(error);
+    console.error("AIRWATCH API:", error);
+
+    updateStatus(
+      false,
+      "Не вдалося оновити дані",
+      "Статуси можуть бути застарілими. Перевір інтернет і офіційні сповіщення."
+    );
+
+    setSystemEvent(
+      "Помилка підключення до API",
+      "Актуальні статуси не підтверджено. Колір карти не слід вважати достовірним."
+    );
+
+    $("#alert-count").textContent = "—";
+    $("#alert-caption").textContent = "Дані недоступні";
+    renderEvents();
   }
 }
 
-async function start() {
+function setupFilters() {
+  document.querySelectorAll("[data-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.querySelectorAll("[data-filter]").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      activeFilter = button.dataset.filter;
+      renderEvents();
+    });
+  });
+}
+
+function setupSearch() {
+  const input = $("#region-search");
+  const container = $("#region-results");
+
+  input.addEventListener("input", () => {
+    const query = normalize(input.value);
+    container.replaceChildren();
+
+    if (!query) {
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent = "Введи назву області, щоб знайти її на карті.";
+      container.append(empty);
+      return;
+    }
+
+    const matches = geoFeatures.filter((feature) =>
+      normalize(getFeatureName(feature)).includes(query)
+    ).slice(0, 20);
+
+    if (!matches.length) {
+      const empty = document.createElement("p");
+      empty.className = "empty-state";
+      empty.textContent =
+        "Не знайдено серед завантажених географічних об'єктів. Спробуй назву області.";
+      container.append(empty);
+      return;
+    }
+
+    matches.forEach((feature) => {
+      const name = getFeatureName(feature);
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "search-result";
+
+      const title = document.createElement("strong");
+      title.textContent = name || "Регіон";
+
+      const hint = document.createElement("small");
+      hint.textContent = "Показати на карті ↗";
+
+      button.append(title, hint);
+      button.addEventListener("click", () => {
+        if (!map || !oblastLayer) return;
+
+        const target = L.geoJSON(feature);
+        map.fitBounds(target.getBounds(), { maxZoom: 9 });
+
+        const region = findRegionForFeature(feature);
+        const active = region ? getAlertsForOblast(region.slug) : [];
+
+        L.popup()
+          .setLatLng(target.getBounds().getCenter())
+          .setContent(
+            `<strong>${escapeHtml(name)}</strong><br>` +
+            (region
+              ? `Активних записів: ${active.length}`
+              : "Не вдалося зіставити регіон із джерелом статусів")
+          )
+          .openOn(map);
+      });
+
+      container.append(button);
+    });
+  });
+}
+
+async function init() {
+  setupFilters();
+  setupSearch();
+
   try {
-    await loadMap();
-    await refreshAlerts();
-    setInterval(refreshAlerts, 60000);
+    await initMap();
   } catch (error) {
-    statusEl.textContent = "Помилка завантаження карти";
-    console.error(error);
+    console.error("AIRWATCH map:", error);
+    $("#map").innerHTML =
+      '<div class="map-loading">Не вдалося завантажити межі карти. Перевір інтернет.</div>';
+    updateStatus(
+      false,
+      "Помилка завантаження карти",
+      "Географічні дані тимчасово недоступні."
+    );
   }
+
+  await refreshAlerts();
+  setInterval(refreshAlerts, 60000);
 }
 
-start();
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}
