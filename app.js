@@ -335,7 +335,7 @@ async function initMap() {
           layer.setStyle({
             color: "#ffffff",
             weight: 2,
-            fillColor: "#ffffff,
+            fillColor: "#ffffff",
             fillOpacity: 0.24
           });
         });
