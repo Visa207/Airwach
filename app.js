@@ -8,7 +8,7 @@ const events = [
     category: "system",
     label: "СИСТЕМА",
     title: "Інтерфейс готовий",
-    detail: "AIRWATCH UA працює. Джерело реальних тривог ще не підключене.",
+    detail: "AIRWATCH UA працює в демонстраційному режимі.",
     time: "Зараз"
   },
   {
@@ -20,6 +20,7 @@ const events = [
   }
 ];
 
+// Міста для пошуку
 const places = [
   { name: "Київ", lat: 50.4501, lng: 30.5234 },
   { name: "Львів", lat: 49.8397, lng: 24.0297 },
@@ -51,8 +52,8 @@ const places = [
 let map = null;
 let placeMarkers = [];
 let boundaryLayer = null;
-let cityLayer = null;
 
+// Події
 function renderEvents(filter = "all") {
   const visible = events.filter(
     (event) => filter === "all" || event.category === filter
@@ -117,151 +118,127 @@ function setupFilters() {
   });
 }
 
-function initMap() {
+// Синьо-чорна карта України без звичайних картографічних плиток
+async function initMap() {
   const mapElement = $("#map");
 
   if (!mapElement) return;
 
   if (!window.L) {
     mapElement.innerHTML =
-      '<div class="map-loading">Не вдалося завантажити Leaflet. Перевір інтернет-з’єднання.</div>';
+      '<div class="map-loading">Не вдалося завантажити бібліотеку карти. Перевір інтернет.</div>';
     return;
   }
 
   mapElement.replaceChildren();
 
+  // Чорний фон замість білих або географічних плиток
+  mapElement.style.background = "#02040a";
+
   map = L.map("map", {
     zoomControl: true,
     scrollWheelZoom: true,
+    doubleClickZoom: true,
     attributionControl: false,
+    preferCanvas: true,
     minZoom: 5,
     maxZoom: 12
-  }).setView([48.8, 31.4], 6);
+  });
 
-  // Темний фон замість стандартних картографічних плиток.
-  map.getContainer().style.background = "#030711";
+  map.setView([48.8, 31.2], 6);
 
-  // Власний синій стиль контролів і масштабування.
-  L.control.zoom({ position: "topright" }).addTo(map);
+  // Темний фон самої карти
+  map.getContainer().style.background = "#02040a";
 
-  // Контури областей України з відкритого GeoJSON.
+  // Географічні контури областей України у форматі GeoJSON
   const geoJsonUrl =
     "https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson";
 
-  fetch(geoJsonUrl)
-    .then((response) => {
-      if (!response.ok) {
-        throw new Error("Не вдалося завантажити межі України");
+  try {
+    const response = await fetch(geoJsonUrl);
+
+    if (!response.ok) {
+      throw new Error("Не вдалося завантажити географічні межі.");
+    }
+
+    const geoData = await response.json();
+
+    // Широкий напівпрозорий контур створює синє світіння
+    const glowLayer = L.geoJSON(geoData, {
+      interactive: false,
+      style: {
+        color: "#0077ff",
+        weight: 7,
+        opacity: 0.18,
+        fillColor: "#02040a",
+        fillOpacity: 0.08,
+        lineCap: "round",
+        lineJoin: "round"
       }
-      return response.json();
-    })
-    .then((geojson) => {
-      if (!map) return;
+    }).addTo(map);
 
-      boundaryLayer = L.geoJSON(geojson, {
-        style: () => ({
-          color: "#168bff",
-          weight: 1.6,
-          opacity: 0.95,
-          fillColor: "#073b77",
-          fillOpacity: 0.38,
-          lineCap: "round",
-          lineJoin: "round"
-        }),
-
-        onEachFeature: (feature, layer) => {
-          const properties = feature.properties || {};
-          const name =
-            properties.name ||
-            properties.NAME_1 ||
-            properties.NAME ||
-            properties.region ||
-            "";
-
-          if (name) {
-            layer.bindTooltip(escapeHtml(String(name)), {
-              permanent: true,
-              direction: "center",
-              className: "airwatch-oblast-label",
-              opacity: 0.95
-            });
-          }
-
-          layer.on({
-            mouseover: (event) => {
-              const target = event.target;
-              target.setStyle({
-                color: "#72c5ff",
-                weight: 2.5,
-                fillColor: "#0875df",
-                fillOpacity: 0.55
-              });
-
-              if (target.bringToFront) target.bringToFront();
-            },
-
-            mouseout: (event) => {
-              if (boundaryLayer) {
-                boundaryLayer.resetStyle(event.target);
-              }
-            },
-
-            click: (event) => {
-              const clickedName =
-                name || "Область України";
-
-              L.popup({
-                className: "airwatch-popup"
-              })
-                .setLatLng(event.latlng)
-                .setContent(
-                  `<strong>${escapeHtml(String(clickedName))}</strong><br>` +
-                  "Статус повітряної тривоги не підключено."
-                )
-                .openOn(map);
-            }
+    // Чіткі сині контури без підписів областей
+    boundaryLayer = L.geoJSON(geoData, {
+      style: {
+        color: "#168cff",
+        weight: 1.4,
+        opacity: 0.95,
+        fillColor: "#061326",
+        fillOpacity: 0.22,
+        lineCap: "round",
+        lineJoin: "round"
+      },
+      onEachFeature: (feature, layer) => {
+        // Жодних назв областей або постійних написів
+        layer.on("mouseover", () => {
+          layer.setStyle({
+            color: "#58b5ff",
+            weight: 2.2,
+            fillColor: "#0b2850",
+            fillOpacity: 0.35
           });
-        }
-      }).addTo(map);
+        });
 
-      // Ефект синього світіння на SVG-контурах.
-      boundaryLayer.eachLayer((layer) => {
-        if (layer._path) {
-          layer._path.style.filter =
-            "drop-shadow(0 0 3px #007bff) drop-shadow(0 0 6px rgba(0,140,255,.65))";
-        }
-      });
-
-      const bounds = boundaryLayer.getBounds();
-
-      if (bounds.isValid()) {
-        map.fitBounds(bounds, {
-          padding: [16, 16]
+        layer.on("mouseout", () => {
+          boundaryLayer.resetStyle(layer);
         });
       }
+    }).addTo(map);
 
-      // Написи областей залишаються читабельними при масштабуванні.
-      setTimeout(() => map.invalidateSize(), 200);
-    })
-    .catch((error) => {
-      console.error("Помилка завантаження GeoJSON:", error);
+    // Обмежуємо огляд картою України
+    const bounds = boundaryLayer.getBounds();
 
-      const message = document.createElement("div");
-      message.className = "map-loading";
-      message.textContent =
-        "Не вдалося завантажити контури України. Перевір інтернет і онови сторінку.";
-      mapElement.append(message);
-    });
+    if (bounds.isValid()) {
+      map.fitBounds(bounds, {
+        padding: [12, 12],
+        maxZoom: 6
+      });
 
-  // Масштаб карти.
-  L.control.scale({
-    imperial: false,
-    position: "bottomleft"
-  }).addTo(map);
+      map.setMaxBounds(bounds.pad(0.12));
+    }
 
-  setTimeout(() => map.invalidateSize(), 150);
+    // Світіння розміщується під чіткими лініями
+    glowLayer.bringToBack();
+    boundaryLayer.bringToFront();
+
+    // Підлаштовуємо розмір після показу карти
+    setTimeout(() => {
+      if (map) map.invalidateSize();
+    }, 200);
+
+  } catch (error) {
+    console.error("Помилка карти:", error);
+
+    const message = document.createElement("div");
+    message.className = "map-loading";
+    message.textContent =
+      "Не вдалося завантажити контури України. Перевір підключення до інтернету та спробуй оновити сторінку.";
+
+    mapElement.append(message);
+  }
 }
 
+// Пошук міст
 function renderSearchResults(query) {
   const container = $("#region-results");
   if (!container) return;
@@ -275,6 +252,7 @@ function renderSearchResults(query) {
     message.className = "empty-state";
     message.textContent =
       "Введи назву населеного пункту, щоб знайти його на карті.";
+
     container.append(message);
     clearPlaceMarkers();
     return;
@@ -289,6 +267,7 @@ function renderSearchResults(query) {
     message.className = "empty-state";
     message.textContent =
       "Населений пункт не знайдено в локальному списку.";
+
     container.append(message);
     clearPlaceMarkers();
     return;
@@ -313,21 +292,21 @@ function renderSearchResults(query) {
         return;
       }
 
-      map.setView([place.lat, place.lng], 9);
-
       clearPlaceMarkers();
 
+      map.setView([place.lat, place.lng], 8);
+
       const marker = L.circleMarker([place.lat, place.lng], {
-        radius: 7,
-        color: "#b8e5ff",
+        radius: 5,
+        color: "#8bd0ff",
         weight: 2,
-        fillColor: "#008cff",
+        opacity: 1,
+        fillColor: "#087bff",
         fillOpacity: 1
       }).addTo(map);
 
       marker.bindPopup(
-        `<strong>${escapeHtml(place.name)}</strong><br>` +
-        "Статус повітряної тривоги невідомий."
+        `<strong>${escapeHtml(place.name)}</strong><br>Географічне розташування.<br>Статус тривоги невідомий.`
       ).openPopup();
 
       placeMarkers.push(marker);
@@ -348,7 +327,7 @@ function clearPlaceMarkers() {
 }
 
 function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
+  return value.replace(/[&<>"']/g, (char) => ({
     "&": "&amp;",
     "<": "&lt;",
     ">": "&gt;",
@@ -365,6 +344,8 @@ function initSearch() {
   search.addEventListener("input", (event) => {
     renderSearchResults(event.target.value);
   });
+
+  renderSearchResults("");
 }
 
 function init() {
