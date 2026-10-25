@@ -9,7 +9,7 @@ const GEOJSON_URL =
 const ALERTS_API =
   "https://tryvoha.online/api/v1/alerts";
 
-const REFRESH_INTERVAL = 30_000;
+const REFRESH_INTERVAL = 30000;
 
 let events = [];
 let map = null;
@@ -17,7 +17,6 @@ let boundaryLayer = null;
 let glowLayer = null;
 let placeMarkers = [];
 let loadMessage = null;
-let refreshTimer = null;
 let lastAlertUpdate = null;
 let alertRequestInProgress = false;
 
@@ -73,7 +72,6 @@ async function fetchJson(url) {
 
   try {
     const response = await fetch(url, {
-      method: "GET",
       cache: "no-store",
       signal: controller.signal,
       headers: { Accept: "application/json" }
@@ -89,11 +87,15 @@ async function fetchJson(url) {
   }
 }
 
+function getActiveFilter() {
+  const active = document.querySelector("[data-filter].active");
+  return active ? active.dataset.filter || "all" : "all";
+}
+
 function renderEvents(filter = "all") {
-  const visible = events.filter((event) => {
-    if (filter === "all") return true;
-    return event.category === filter;
-  });
+  const visible = events.filter(
+    (event) => filter === "all" || event.category === filter
+  );
 
   setText("#event-count", String(visible.length));
   setText("#event-badge", String(visible.length));
@@ -116,7 +118,8 @@ function renderEvents(filter = "all") {
     article.className = "event-item";
 
     const icon = document.createElement("div");
-    icon.className = `event-icon ${event.category === "info" ? "info" : ""}`;
+    icon.className =
+      `event-icon ${event.category === "info" ? "info" : ""}`;
     icon.textContent =
       event.category === "alert" ? "!" :
       event.category === "system" ? "⌁" : "i";
@@ -152,30 +155,19 @@ function setupFilters() {
       document.querySelectorAll("[data-filter]").forEach((item) => {
         item.classList.toggle("active", item === button);
       });
-
       renderEvents(button.dataset.filter || "all");
     });
   });
 }
 
 function setConnectionStatus(connected, message) {
-  const label = $("#connection-label");
-  const source = $("#source-status");
-
-  if (label) label.textContent = message;
-  if (source) source.textContent = connected
-    ? "Джерело даних доступне"
-    : "Не вдалося отримати актуальні дані";
-}
-
-function addSystemEvent(title, detail) {
-  events.push({
-    category: "system",
-    label: "СИСТЕМА",
-    title,
-    detail,
-    time: formatTime(new Date().toISOString())
-  });
+  setText("#connection-label", message);
+  setText(
+    "#source-status",
+    connected
+      ? "Джерело даних доступне"
+      : "Актуальні дані не підтверджені"
+  );
 }
 
 async function loadAlerts() {
@@ -186,71 +178,59 @@ async function loadAlerts() {
     const data = await fetchJson(ALERTS_API);
 
     if (!data || !Array.isArray(data.alerts)) {
-      throw new Error("Непередбачений формат відповіді API");
+      throw new Error("API повернуло неочікуваний формат даних.");
     }
 
-    const activeAlerts = data.alerts;
+    events = data.alerts.map((alert) => ({
+      category: "alert",
+      label: alert.level === "yellow" ? "ПОПЕРЕДЖЕННЯ" : "ТРИВОГА",
+      title: alert.name_uk || alert.name_en || alert.slug || "Невідомий регіон",
+      detail: alert.level === "yellow"
+        ? "За даними джерела, оголошено жовтий рівень загрози."
+        : alert.level === "red"
+          ? "За даними джерела, діє червоний рівень загрози."
+          : "Джерело повідомляє про активну подію. Перевір офіційні сповіщення.",
+      time: formatTime(alert.started_at)
+    }));
 
-    const newEvents = activeAlerts.map((alert) => {
-      const isYellow = alert.level === "yellow";
-      const regionName = alert.name_uk || alert.name_en || alert.slug ||
-        "Невідомий регіон";
-
-      return {
-        category: "alert",
-        label: isYellow ? "ПОПЕРЕДЖЕННЯ" : "ТРИВОГА",
-        title: regionName,
-        detail: isYellow
-          ? "Джерело повідомляє про жовтий рівень загрози."
-          : "Джерело повідомляє про активну повітряну тривогу.",
-        time: formatTime(alert.started_at)
-      };
-    });
-
-    if (newEvents.length === 0) {
-      newEvents.push({
+    if (events.length === 0) {
+      events = [{
         category: "info",
         label: "СТАТУС ДЖЕРЕЛА",
-        title: "Активних тривог у відповіді API немає",
-        detail: "Це дані незалежного сервісу; перевіряй офіційні сповіщення.",
+        title: "Активних подій не повернуто",
+        detail: "Це не замінює офіційних сповіщень про тривогу.",
         time: formatTime(data.updated_at)
-      });
+      }];
     }
-
-    events = newEvents;
 
     lastAlertUpdate = new Date();
     setConnectionStatus(true, "Зв'язок є");
-    setText("#last-update", `Оновлено: ${formatTime(data.updated_at || lastAlertUpdate.toISOString())}`);
-
-    renderEvents(getActiveFilter());
-
+    setText(
+      "#last-update",
+      `Оновлено: ${formatTime(data.updated_at || lastAlertUpdate.toISOString())}`
+    );
   } catch (error) {
-    console.error("Не вдалося отримати дані тривог:", error);
+    console.error("Помилка отримання тривог:", error);
 
-    // Не показуємо старі дані як актуальні.
     events = [{
       category: "info",
       label: "ПОМИЛКА ДЖЕРЕЛА",
-      title: "Не вдалося отримати дані тривог",
-      detail: "Перевір інтернет або спробуй пізніше. Поточний статус невідомий.",
+      title: "Не вдалося отримати дані",
+      detail: "Статус тривог невідомий. Перевір інтернет або джерело даних.",
       time: formatTime(new Date().toISOString())
     }];
 
     setConnectionStatus(false, "Немає зв'язку");
-    setText("#last-update", lastAlertUpdate
-      ? `Останній успішний запит: ${formatTime(lastAlertUpdate.toISOString())}`
-      : "Актуальність даних не підтверджено");
-
-    renderEvents(getActiveFilter());
+    setText(
+      "#last-update",
+      lastAlertUpdate
+        ? `Останнє успішне оновлення: ${formatTime(lastAlertUpdate.toISOString())}`
+        : "Актуальність даних не підтверджено"
+    );
   } finally {
     alertRequestInProgress = false;
+    renderEvents(getActiveFilter());
   }
-}
-
-function getActiveFilter() {
-  const active = document.querySelector("[data-filter].active");
-  return active ? active.dataset.filter || "all" : "all";
 }
 
 function showMapMessage(message) {
@@ -275,7 +255,8 @@ async function initMap() {
   const mapElement = $("#map");
   if (!mapElement) return;
 
-  mapElement.style.background = "#02040a";
+  // Білий фон і тоді, коли контури ще завантажуються.
+  mapElement.style.background = "#ffffff";
 
   if (!window.L) {
     showMapMessage("Leaflet не завантажився. Перевір інтернет.");
@@ -295,7 +276,7 @@ async function initMap() {
     zoomSnap: 0.25
   });
 
-  map.getContainer().style.background = "#02040a";
+  map.getContainer().style.background = "#ffffff";
   map.setView([48.8, 31.2], 6);
 
   showMapMessage("Завантаження контурів України…");
@@ -310,11 +291,11 @@ async function initMap() {
     glowLayer = L.geoJSON(data, {
       interactive: false,
       style: {
-        color: "#031126",
-        weight: 8,
-        opacity: 0.2,
+        color: "#000000",
+        weight: 4,
+        opacity: 0.12,
         fillColor: "#ffffff",
-        fillOpacity: 0.16,
+        fillOpacity: 0.01,
         lineCap: "round",
         lineJoin: "round"
       }
@@ -322,21 +303,21 @@ async function initMap() {
 
     boundaryLayer = L.geoJSON(data, {
       style: {
-        color: "#031126",
-        weight: 1.25,
+        color: "#111111",
+        weight: 1.3,
         opacity: 1,
-        fillColor: "#031126",
-        fillOpacity: 0.12,
+        fillColor: "#ffffff",
+        fillOpacity: 0.05,
         lineCap: "round",
         lineJoin: "round"
       },
       onEachFeature: (feature, layer) => {
         layer.on("mouseover", () => {
           layer.setStyle({
-            color: "#ffffff",
+            color: "#000000",
             weight: 2,
-            fillColor: "#ffffff",
-            fillOpacity: 0.24
+            fillColor: "#eeeeee",
+            fillOpacity: 0.3
           });
         });
 
@@ -358,29 +339,22 @@ async function initMap() {
     hideMapMessage();
 
     setTimeout(() => {
-      if (map) {
+      if (map && boundaryLayer) {
         map.invalidateSize();
-        if (boundaryLayer) {
-          map.fitBounds(boundaryLayer.getBounds(), {
-            padding: [14, 14],
-            maxZoom: 6
-          });
-        }
+        map.fitBounds(boundaryLayer.getBounds(), {
+          padding: [14, 14],
+          maxZoom: 6
+        });
       }
     }, 250);
-
   } catch (error) {
-    console.error("Помилка завантаження контурів:", error);
-    showMapMessage(
-      "Не вдалося завантажити контури України. Перевір інтернет і спробуй оновити сторінку."
-    );
+    console.error("Помилка завантаження карти:", error);
+    showMapMessage("Не вдалося завантажити контури. Перевір інтернет.");
   }
 }
 
 function clearPlaceMarkers() {
-  if (map) {
-    placeMarkers.forEach((marker) => map.removeLayer(marker));
-  }
+  if (map) placeMarkers.forEach((marker) => map.removeLayer(marker));
   placeMarkers = [];
 }
 
@@ -399,7 +373,6 @@ function renderSearchResults(query) {
   if (!container) return;
 
   container.replaceChildren();
-
   const normalized = query.trim().toLocaleLowerCase("uk");
 
   if (!normalized) {
@@ -448,16 +421,16 @@ function renderSearchResults(query) {
 
       const marker = L.circleMarker([place.lat, place.lng], {
         radius: 5,
-        color: "#a8ddff",
+        color: "#000000",
         weight: 2,
-        fillColor: "#087bff",
+        fillColor: "#ffffff",
         fillOpacity: 1
       }).addTo(map);
 
       marker.bindPopup(
         `<strong>${escapeHtml(place.name)}</strong><br>` +
         "Географічне розташування.<br>" +
-        "Статус тривоги перевіряй у стрічці подій та офіційних сповіщеннях."
+        "Для статусу тривоги перевіряй офіційні сповіщення."
       ).openPopup();
 
       placeMarkers.push(marker);
@@ -479,13 +452,11 @@ function initSearch() {
 }
 
 function init() {
-  setConnectionStatus(false, "Підключення…");
-
   events = [{
     category: "info",
     label: "СИСТЕМА",
     title: "Підключення до джерела даних",
-    detail: "Очікуємо відповідь сервера. Статус тривог поки не підтверджено.",
+    detail: "Статус тривог ще не підтверджено.",
     time: formatTime(new Date().toISOString())
   }];
 
@@ -493,9 +464,9 @@ function init() {
   setupFilters();
   initSearch();
   initMap();
-
   loadAlerts();
-  refreshTimer = setInterval(loadAlerts, REFRESH_INTERVAL);
+
+  setInterval(loadAlerts, REFRESH_INTERVAL);
 }
 
 if (document.readyState === "loading") {
