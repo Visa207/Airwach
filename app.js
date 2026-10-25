@@ -322,10 +322,10 @@ async function initMap() {
 
     boundaryLayer = L.geoJSON(data, {
       style: {
-        color: "#168cff",
+        color: "#031126",
         weight: 1.25,
         opacity: 1,
-        fillColor: "#020713",
+        fillColor: "#031126",
         fillOpacity: 0.12,
         lineCap: "round",
         lineJoin: "round"
@@ -333,9 +333,9 @@ async function initMap() {
       onEachFeature: (feature, layer) => {
         layer.on("mouseover", () => {
           layer.setStyle({
-            color: "#72c5ff",
+            color: "#ffffff",
             weight: 2,
-            fillColor: "#092044",
+            fillColor: "#ffffff,
             fillOpacity: 0.24
           });
         });
