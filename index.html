@@ -1,161 +1,17 @@
+<CodeBlock language="html" editable> <!doctype html> <html lang="uk"> <head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>AIRWATCH UA — мапа тривог</title> <link rel="stylesheet" href="./style.css"> <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" > </head> <body> <header> <h1>AIRWATCH UA</h1> <p>Інформаційна мапа повітряних тривог України</p> </header>
 
-<!DOCTYPE html>
-<html lang="uk">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#080e17">
-  <meta name="description" content="AIRWATCH UA — інформаційна мапа повітряних тривог України.">
-  <title>AIRWATCH UA — Мапа тривог</title>
+<main> <section class="status-panel"> <strong id="status">Завантаження…</strong> <span>Оновлено: <time id="updated">—</time></span> </section>
 
-  <link rel="stylesheet"
-    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
-    crossorigin="">
+<section class="legend" aria-label="Умовні позначення"> <span><i class="dot red"></i> Тривога</span> <span><i class="dot yellow"></i> Часткова тривога</span> <span><i class="dot white"></i> Немає активної тривоги в джерелі</span> <span><i class="dot gray"></i> Невідомо</span> </section>
 
-  <link rel="stylesheet" href="./style.css">
-</head>
-<body>
-  <div class="app-shell">
-    <header class="topbar">
-      <a class="brand" href="./" aria-label="AIRWATCH UA — головна">
-        <div class="brand-icon">⌁</div>
-        <div>
-          <div class="brand-name">AIRWATCH <span>UA</span></div>
-          <div class="brand-subtitle">СИСТЕМА МОНІТОРИНГУ</div>
-        </div>
-      </a>
+<div id="map" aria-label="Карта областей України"></div>
 
-      <div class="demo-pill">
-        <i></i>
-        <span>ДЕМО-РЕЖИМ</span>
-      </div>
-    </header>
+<section class="alerts-panel"> <h2>Активні повідомлення</h2> <ul id="alerts-list"> <li>Завантаження даних…</li> </ul> </section>
 
-    <section class="status-banner">
-      <div class="status-symbol">!</div>
-      <div class="status-copy">
-        <strong>Джерело даних не підключено</strong>
-        <span>Цей сайт поки не отримує реальні повідомлення про загрози.</span>
-      </div>
-      <span class="offline-label">OFFLINE</span>
-    </section>
+<p class="disclaimer"> Джерело даних: Tryvoha.online. Інформаційний сервіс може мати затримки або помилки. Для рішень щодо безпеки користуйтеся офіційними сповіщеннями та виконуйте вказівки місцевої влади. </p> </main>
 
-    <section class="stats-grid">
-      <article class="stat-card">
-        <span>ПОВІТРЯНІ ТРИВОГИ</span>
-        <strong>—</strong>
-        <small>Дані недоступні</small>
-      </article>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-      <article class="stat-card">
-        <span>ПОДІЇ В СТРІЧЦІ</span>
-        <strong id="event-count">0</strong>
-        <small>Інформаційні записи</small>
-      </article>
+<script src="./app.js"></script>
 
-      <article class="stat-card">
-        <span>ОСТАННЄ ОНОВЛЕННЯ</span>
-        <strong class="stat-time" id="last-update">—</strong>
-        <small id="connection-label">API не підключено</small>
-      </article>
-    </section>
-
-    <main class="content-grid">
-      <section class="panel map-panel">
-        <div class="panel-heading">
-          <div>
-            <h1>Мапа України</h1>
-            <p>Інтерактивна карта · географічна основа</p>
-          </div>
-          <span class="map-status"><i></i> НЕ LIVE</span>
-        </div>
-
-        <div id="map" role="application"
-          aria-label="Інтерактивна географічна карта України">
-          <div class="map-loading">Завантаження карти…</div>
-        </div>
-
-        <div class="map-legend">
-          <span><i class="legend-dot neutral"></i> Немає даних</span>
-          <span><i class="legend-dot alert"></i> Тривога</span>
-          <span><i class="legend-dot info"></i> Інформація</span>
-        </div>
-
-        <div class="region-area">
-          <label for="region-search">Пошук області або міста</label>
-          <input id="region-search" type="search"
-            placeholder="Наприклад, Львів або Київ"
-            autocomplete="off">
-
-          <div id="region-results" class="region-results">
-            <p class="empty-state">
-              Введи назву населеного пункту, щоб знайти його на карті.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <aside class="panel events-panel">
-        <div class="panel-heading">
-          <div>
-            <h2>Стрічка подій</h2>
-            <p>Повідомлення та стан системи</p>
-          </div>
-          <span class="event-count" id="event-badge">0</span>
-        </div>
-
-        <div class="filter-row" role="group" aria-label="Фільтр подій">
-          <button class="filter active" data-filter="all">Усі</button>
-          <button class="filter" data-filter="system">Система</button>
-          <button class="filter" data-filter="info">Інфо</button>
-        </div>
-
-        <div id="event-list" class="event-list">
-          <article class="event-item">
-            <div class="event-icon">i</div>
-            <div class="event-body">
-              <div class="event-meta">
-                <span>СИСТЕМА</span>
-                <time>Зараз</time>
-              </div>
-              <strong>Сайт готовий до налаштування</strong>
-              <p>Підключення джерела даних ще не виконано.</p>
-            </div>
-          </article>
-        </div>
-
-        <div class="source-box">
-          <span class="source-dot"></span>
-          <div>
-            <strong>Джерело даних</strong>
-            <p id="source-status">Не підключено</p>
-          </div>
-        </div>
-
-        <div class="safety-note">
-          <strong>Важливо</strong>
-          <p>
-            Цей сайт не є офіційною системою оповіщення.
-            Не покладайся на нього для визначення реальних загроз.
-            Користуйся офіційними сповіщеннями та вказівками
-            місцевої влади.
-          </p>
-        </div>
-      </aside>
-    </main>
-
-    <footer>
-      <span>AIRWATCH UA <b>·</b> ПРОТОТИП 0.1.0</span>
-      <span>Дані про загрози не підключені</span>
-    </footer>
-  </div>
-
-  <script
-    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
-    crossorigin="">
-  </script>
-  <script src="./app.js"></script>
-</body>
-</html>
+</body> </html> </CodeBlock>
