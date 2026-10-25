@@ -3,6 +3,9 @@
 
 const $ = (selector) => document.querySelector(selector);
 
+const GEOJSON_URL =
+  "https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson";
+
 const events = [
   {
     category: "system",
@@ -14,13 +17,12 @@ const events = [
   {
     category: "info",
     label: "ІНФО",
-    title: "Джерело не підключено",
-    detail: "Реальні статуси тривог ще не надходять.",
+    title: "Дані тривог не підключені",
+    detail: "Статуси повітряних тривог невідомі.",
     time: "—"
   }
 ];
 
-// Міста для пошуку
 const places = [
   { name: "Київ", lat: 50.4501, lng: 30.5234 },
   { name: "Львів", lat: 49.8397, lng: 24.0297 },
@@ -50,27 +52,33 @@ const places = [
 ];
 
 let map = null;
-let placeMarkers = [];
 let boundaryLayer = null;
+let glowLayer = null;
+let placeMarkers = [];
+let loadMessage = null;
 
-// Події
 function renderEvents(filter = "all") {
   const visible = events.filter(
     (event) => filter === "all" || event.category === filter
   );
 
-  $("#event-count").textContent = String(visible.length);
-  $("#event-badge").textContent = String(visible.length);
-
+  const count = $("#event-count");
+  const badge = $("#event-badge");
   const list = $("#event-list");
 
-  if (!visible.length) {
-    list.innerHTML =
-      '<p class="empty-state">Подій цієї категорії немає.</p>';
-    return;
-  }
+  if (count) count.textContent = String(visible.length);
+  if (badge) badge.textContent = String(visible.length);
+  if (!list) return;
 
   list.replaceChildren();
+
+  if (!visible.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent = "Подій цієї категорії немає.";
+    list.append(empty);
+    return;
+  }
 
   visible.forEach((event) => {
     const article = document.createElement("article");
@@ -118,84 +126,108 @@ function setupFilters() {
   });
 }
 
-// Синьо-чорна карта України без звичайних картографічних плиток
-async function initMap() {
+function showMapMessage(message) {
   const mapElement = $("#map");
-
   if (!mapElement) return;
 
+  if (!loadMessage) {
+    loadMessage = document.createElement("div");
+    loadMessage.className = "map-loading";
+    mapElement.append(loadMessage);
+  }
+
+  loadMessage.textContent = message;
+  loadMessage.style.display = "block";
+}
+
+function hideMapMessage() {
+  if (loadMessage) {
+    loadMessage.style.display = "none";
+  }
+}
+
+async function initMap() {
+  const mapElement = $("#map");
+  if (!mapElement) return;
+
+  mapElement.style.background = "#02040a";
+
   if (!window.L) {
-    mapElement.innerHTML =
-      '<div class="map-loading">Не вдалося завантажити бібліотеку карти. Перевір інтернет.</div>';
+    showMapMessage("Leaflet не завантажився. Перевір інтернет.");
     return;
   }
 
   mapElement.replaceChildren();
-
-  // Чорний фон замість білих або географічних плиток
-  mapElement.style.background = "#02040a";
+  loadMessage = null;
 
   map = L.map("map", {
     zoomControl: true,
     scrollWheelZoom: true,
     doubleClickZoom: true,
     attributionControl: false,
-    preferCanvas: true,
     minZoom: 5,
-    maxZoom: 12
+    maxZoom: 11,
+    zoomSnap: 0.25
   });
 
-  map.setView([48.8, 31.2], 6);
-
-  // Темний фон самої карти
   map.getContainer().style.background = "#02040a";
 
-  // Географічні контури областей України у форматі GeoJSON
-  const geoJsonUrl =
-    "https://cdn.jsdelivr.net/gh/darmat1/ukraine-geo-data@main/geodata/Ukraine.geojson";
+  // Прибрано всі стандартні плитки: лише чорний фон і геометрія.
+  map.setView([48.8, 31.2], 6);
+
+  showMapMessage("Завантаження синіх контурів України…");
 
   try {
-    const response = await fetch(geoJsonUrl);
+    const response = await fetch(GEOJSON_URL, {
+      cache: "force-cache"
+    });
 
     if (!response.ok) {
-      throw new Error("Не вдалося завантажити географічні межі.");
+      throw new Error(`GeoJSON HTTP ${response.status}`);
     }
 
-    const geoData = await response.json();
+    const data = await response.json();
 
-    // Широкий напівпрозорий контур створює синє світіння
-    const glowLayer = L.geoJSON(geoData, {
+    if (
+      !data ||
+      !Array.isArray(data.features) ||
+      data.features.length === 0
+    ) {
+      throw new Error("У GeoJSON немає географічних об'єктів.");
+    }
+
+    // М'яке світіння під основними лініями.
+    glowLayer = L.geoJSON(data, {
       interactive: false,
       style: {
-        color: "#0077ff",
-        weight: 7,
-        opacity: 0.18,
-        fillColor: "#02040a",
-        fillOpacity: 0.08,
+        color: "#007bff",
+        weight: 8,
+        opacity: 0.20,
+        fillColor: "#031126",
+        fillOpacity: 0.16,
         lineCap: "round",
         lineJoin: "round"
       }
     }).addTo(map);
 
-    // Чіткі сині контури без підписів областей
-    boundaryLayer = L.geoJSON(geoData, {
+    // Чіткі межі на передньому плані.
+    boundaryLayer = L.geoJSON(data, {
       style: {
         color: "#168cff",
-        weight: 1.4,
-        opacity: 0.95,
-        fillColor: "#061326",
-        fillOpacity: 0.22,
+        weight: 1.25,
+        opacity: 1,
+        fillColor: "#020713",
+        fillOpacity: 0.12,
         lineCap: "round",
         lineJoin: "round"
       },
       onEachFeature: (feature, layer) => {
-        // Жодних назв областей або постійних написів
         layer.on("mouseover", () => {
           layer.setStyle({
-            color: "#58b5ff",
-            weight: 2.2,
-            fillColor: "#0b2850",
-            fillOpacity: 0.35
+            color: "#72c5ff",
+            weight: 2,
+            fillColor: "#092044",
+            fillOpacity: 0.24
           });
         });
 
@@ -205,40 +237,61 @@ async function initMap() {
       }
     }).addTo(map);
 
-    // Обмежуємо огляд картою України
     const bounds = boundaryLayer.getBounds();
 
-    if (bounds.isValid()) {
-      map.fitBounds(bounds, {
-        padding: [12, 12],
-        maxZoom: 6
-      });
-
-      map.setMaxBounds(bounds.pad(0.12));
+    if (!bounds.isValid()) {
+      throw new Error("Не вдалося визначити межі карти.");
     }
 
-    // Світіння розміщується під чіткими лініями
-    glowLayer.bringToBack();
-    boundaryLayer.bringToFront();
+    map.fitBounds(bounds, {
+      padding: [14, 14],
+      maxZoom: 6
+    });
 
-    // Підлаштовуємо розмір після показу карти
+    // Не дозволяємо випадково віддалитися від України.
+    map.setMaxBounds(bounds.pad(0.18));
+
+    hideMapMessage();
+
+    // На телефонах Leaflet іноді спочатку визначає неправильний розмір.
     setTimeout(() => {
-      if (map) map.invalidateSize();
-    }, 200);
+      if (map) {
+        map.invalidateSize();
+        if (boundaryLayer) {
+          map.fitBounds(boundaryLayer.getBounds(), {
+            padding: [14, 14],
+            maxZoom: 6
+          });
+        }
+      }
+    }, 250);
 
   } catch (error) {
-    console.error("Помилка карти:", error);
+    console.error("Помилка завантаження контурів:", error);
 
-    const message = document.createElement("div");
-    message.className = "map-loading";
-    message.textContent =
-      "Не вдалося завантажити контури України. Перевір підключення до інтернету та спробуй оновити сторінку.";
-
-    mapElement.append(message);
+    showMapMessage(
+      "Не вдалося завантажити контури. Перевір інтернет і онови сторінку."
+    );
   }
 }
 
-// Пошук міст
+function clearPlaceMarkers() {
+  if (map) {
+    placeMarkers.forEach((marker) => map.removeLayer(marker));
+  }
+  placeMarkers = [];
+}
+
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;"
+  })[char]);
+}
+
 function renderSearchResults(query) {
   const container = $("#region-results");
   if (!container) return;
@@ -248,12 +301,11 @@ function renderSearchResults(query) {
   const normalized = query.trim().toLocaleLowerCase("uk");
 
   if (!normalized) {
-    const message = document.createElement("p");
-    message.className = "empty-state";
-    message.textContent =
-      "Введи назву населеного пункту, щоб знайти його на карті.";
-
-    container.append(message);
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent =
+      "Введи назву міста, щоб знайти його на карті.";
+    container.append(empty);
     clearPlaceMarkers();
     return;
   }
@@ -263,20 +315,19 @@ function renderSearchResults(query) {
   );
 
   if (!matches.length) {
-    const message = document.createElement("p");
-    message.className = "empty-state";
-    message.textContent =
-      "Населений пункт не знайдено в локальному списку.";
-
-    container.append(message);
+    const empty = document.createElement("p");
+    empty.className = "empty-state";
+    empty.textContent =
+      "Місто не знайдено в локальному списку з 25 міст.";
+    container.append(empty);
     clearPlaceMarkers();
     return;
   }
 
   matches.forEach((place) => {
     const button = document.createElement("button");
-    button.className = "search-result";
     button.type = "button";
+    button.className = "search-result";
 
     const name = document.createElement("strong");
     name.textContent = place.name;
@@ -293,20 +344,23 @@ function renderSearchResults(query) {
       }
 
       clearPlaceMarkers();
-
       map.setView([place.lat, place.lng], 8);
 
-      const marker = L.circleMarker([place.lat, place.lng], {
-        radius: 5,
-        color: "#8bd0ff",
-        weight: 2,
-        opacity: 1,
-        fillColor: "#087bff",
-        fillOpacity: 1
-      }).addTo(map);
+      const marker = L.circleMarker(
+        [place.lat, place.lng],
+        {
+          radius: 5,
+          color: "#a8ddff",
+          weight: 2,
+          fillColor: "#087bff",
+          fillOpacity: 1
+        }
+      ).addTo(map);
 
       marker.bindPopup(
-        `<strong>${escapeHtml(place.name)}</strong><br>Географічне розташування.<br>Статус тривоги невідомий.`
+        `<strong>${escapeHtml(place.name)}</strong><br>` +
+        "Географічне розташування.<br>" +
+        "Статус тривоги не отримується."
       ).openPopup();
 
       placeMarkers.push(marker);
@@ -316,29 +370,8 @@ function renderSearchResults(query) {
   });
 }
 
-function clearPlaceMarkers() {
-  placeMarkers.forEach((marker) => {
-    if (map && map.hasLayer(marker)) {
-      map.removeLayer(marker);
-    }
-  });
-
-  placeMarkers = [];
-}
-
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
-}
-
 function initSearch() {
   const search = $("#region-search");
-
   if (!search) return;
 
   search.addEventListener("input", (event) => {
