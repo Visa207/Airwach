@@ -5,8 +5,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#02040a">
-  <meta name="description" content="AIRWATCH UA — прототип мапи України.">
+  <meta name="description" content="AIRWATCH UA — прототип інтерактивної мапи України.">
   <title>AIRWATCH UA — Мапа тривог</title>
+
+  <link rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
   <link rel="stylesheet" href="./style.css">
 </head>
 <body>
@@ -19,7 +23,11 @@
           <div class="brand-subtitle">СИСТЕМА МОНІТОРИНГУ</div>
         </div>
       </a>
-      <div class="demo-pill"><i></i><span>ДЕМО-РЕЖИМ</span></div>
+
+      <div class="demo-pill">
+        <i></i>
+        <span>ДЕМО-РЕЖИМ</span>
+      </div>
     </header>
 
     <section class="status-banner">
@@ -37,11 +45,13 @@
         <strong>—</strong>
         <small>Дані недоступні</small>
       </article>
+
       <article class="stat-card">
         <span>ПОДІЇ В СТРІЧЦІ</span>
         <strong id="event-count">0</strong>
         <small>Інформаційні записи</small>
       </article>
+
       <article class="stat-card">
         <span>ОСТАННЄ ОНОВЛЕННЯ</span>
         <strong class="stat-time" id="last-update">—</strong>
@@ -54,13 +64,14 @@
         <div class="panel-heading">
           <div>
             <h1>Мапа України</h1>
-            <p>Векторна карта · сині контури</p>
+            <p>Сині контури · темний режим</p>
           </div>
           <span class="map-status"><i></i> НЕ LIVE</span>
         </div>
 
-        <div id="map" role="application" aria-label="Стилізована векторна мапа України">
-          <div class="map-loading">Побудова карти…</div>
+        <div id="map" role="application"
+          aria-label="Інтерактивна мапа контурів України">
+          <div class="map-loading">Завантаження контурів України…</div>
         </div>
 
         <div class="map-legend">
@@ -74,8 +85,11 @@
           <input id="region-search" type="search"
             placeholder="Наприклад, Львів або Київ"
             autocomplete="off">
+
           <div id="region-results" class="region-results">
-            <p class="empty-state">Введи назву міста.</p>
+            <p class="empty-state">
+              Введи назву міста, щоб знайти його на карті.
+            </p>
           </div>
         </div>
       </section>
@@ -107,7 +121,10 @@
 
         <div class="safety-note">
           <strong>Важливо</strong>
-          <p>Це демонстраційний прототип, а не офіційна система оповіщення. Для реальних загроз користуйся офіційними сповіщеннями та вказівками місцевої влади.</p>
+          <p>
+            Це не офіційна система оповіщення. Дані тривог не підключені.
+            Користуйся офіційними сповіщеннями та вказівками місцевої влади.
+          </p>
         </div>
       </aside>
     </main>
@@ -118,6 +135,9 @@
     </footer>
   </div>
 
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js">
+  </script>
   <script src="./app.js"></script>
 </body>
 </html>
