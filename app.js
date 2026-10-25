@@ -310,10 +310,10 @@ async function initMap() {
     glowLayer = L.geoJSON(data, {
       interactive: false,
       style: {
-        color: "#007bff",
+        color: "#031126",
         weight: 8,
         opacity: 0.2,
-        fillColor: "#031126",
+        fillColor: "#ffffff",
         fillOpacity: 0.16,
         lineCap: "round",
         lineJoin: "round"
