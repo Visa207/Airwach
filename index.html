@@ -1,17 +1,53 @@
-<CodeBlock language="html" editable> <!doctype html> <html lang="uk"> <head> <meta charset="utf-8"> <meta name="viewport" content="width=device-width, initial-scale=1"> <title>AIRWATCH UA — мапа тривог</title> <link rel="stylesheet" href="./style.css"> <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" > </head> <body> <header> <h1>AIRWATCH UA</h1> <p>Інформаційна мапа повітряних тривог України</p> </header>
+<!doctype html>
+<html lang="uk">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101010">
+  <title>AIRWATCH UA — мапа тривог</title>
 
-<main> <section class="status-panel"> <strong id="status">Завантаження…</strong> <span>Оновлено: <time id="updated">—</time></span> </section>
+  <link rel="stylesheet" href="./style.css">
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  >
+</head>
+<body>
+  <header>
+    <h1>AIRWATCH UA</h1>
+    <p>Інформаційна мапа повітряних тривог України</p>
+  </header>
 
-<section class="legend" aria-label="Умовні позначення"> <span><i class="dot red"></i> Тривога</span> <span><i class="dot yellow"></i> Часткова тривога</span> <span><i class="dot white"></i> Немає активної тривоги в джерелі</span> <span><i class="dot gray"></i> Невідомо</span> </section>
+  <main>
+    <section class="status-panel">
+      <strong id="status">Завантаження даних...</strong>
+      <span>Оновлено: <time id="updated">—</time></span>
+    </section>
 
-<div id="map" aria-label="Карта областей України"></div>
+    <section class="legend">
+      <span><i class="dot red"></i> Тривога</span>
+      <span><i class="dot yellow"></i> Часткова тривога</span>
+      <span><i class="dot white"></i> Немає активної тривоги в джерелі</span>
+      <span><i class="dot gray"></i> Невідомий статус</span>
+    </section>
 
-<section class="alerts-panel"> <h2>Активні повідомлення</h2> <ul id="alerts-list"> <li>Завантаження даних…</li> </ul> </section>
+    <div id="map" aria-label="Карта областей України"></div>
 
-<p class="disclaimer"> Джерело даних: Tryvoha.online. Інформаційний сервіс може мати затримки або помилки. Для рішень щодо безпеки користуйтеся офіційними сповіщеннями та виконуйте вказівки місцевої влади. </p> </main>
+    <section class="alerts-panel">
+      <h2>Активні повідомлення</h2>
+      <ul id="alerts-list">
+        <li>Завантаження даних...</li>
+      </ul>
+    </section>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <p class="disclaimer">
+      Джерело даних: Tryvoha.online. Дані можуть затримуватися або
+      бути недоступними. Для власної безпеки користуйтеся офіційними
+      сповіщеннями та виконуйте вказівки місцевої влади.
+    </p>
+  </main>
 
-<script src="./app.js"></script>
-
-</body> </html> </CodeBlock>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
